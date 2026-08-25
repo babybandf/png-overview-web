@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNG Overview · 从字节到像素 | 工程师互动讲义</title>
+<meta name="description" content="面向软件与硬件工程师的 PNG 解码互动讲义：Chunk 结构、IDAT 数据流、Filter/Unfilter、zlib/DEFLATE、LZ77 与 Huffman。">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ======== 顶部导航 ======== -->
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#hero">
+      <span class="brand-mark">89&nbsp;50&nbsp;4E&nbsp;47</span>
+      <span class="brand-text">PNG Overview</span>
+    </a>
+    <nav class="topnav" aria-label="章节导航">
+      <a href="#anatomy" data-nav="anatomy">文件结构</a>
+      <a href="#decode" data-nav="decode">解码路径</a>
+      <a href="#unfilter" data-nav="unfilter">Unfilter</a>
+      <a href="#lz77" data-nav="lz77">DEFLATE</a>
+      <a href="#compare" data-nav="compare">对比与回顾</a>
+    </nav>
+  </div>
+  <div class="progress" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+</header>
+
+<!-- ======== 侧边章节点 ======== -->
+<nav class="dotnav" id="dotnav" aria-label="页面章节">
+  <a href="#hero"        data-nav="hero"><i></i><span>开场</span></a>
+  <a href="#why"         data-nav="why"><i></i><span>背景</span></a>
+  <a href="#history"     data-nav="history"><i></i><span>规范</span></a>
+  <a href="#value"       data-nav="value"><i></i><span>价值</span></a>
+  <a href="#anatomy"     data-nav="anatomy"><i></i><span>解剖</span></a>
+  <a href="#chunk"       data-nav="chunk"><i></i><span>Chunk</span></a>
+  <a href="#idat"        data-nav="idat"><i></i><span>IDAT</span></a>
+  <a href="#encode"      data-nav="encode"><i></i><span>编码</span></a>
+  <a href="#decode"      data-nav="decode"><i></i><span>解码</span></a>
+  <a href="#scanline"    data-nav="scanline"><i></i><span>Scanline</span></a>
+  <a href="#filters"     data-nav="filters"><i></i><span>Filter</span></a>
+  <a href="#unfilter"    data-nav="unfilter"><i></i><span>Unfilter</span></a>
+  <a href="#zlib"        data-nav="zlib"><i></i><span>zlib</span></a>
+  <a href="#lz77"        data-nav="lz77"><i></i><span>LZ77</span></a>
+  <a href="#huffman"     data-nav="huffman"><i></i><span>Huffman</span></a>
+  <a href="#compare"     data-nav="compare"><i></i><span>回顾</span></a>
+</nav>
+
+<!-- ======== HERO ======== -->
+<section class="hero" id="hero">
+  <canvas id="hexRain" aria-hidden="true"></canvas>
+  <div class="hero-vignette" aria-hidden="true"></div>
+  <div class="hero-content">
+    <p class="hero-kicker reveal">Multi-Media, ARM China, River, 2026/08/25</p>
+    <h1 class="hero-title reveal"><em>PNG</em> Overview<br>从 8 个字节，到每一个像素</h1>
+
+    <div class="sig-strip reveal" id="sigStrip" aria-label="PNG 文件签名">
+      <span class="sig-byte" style="--d:0">89</span>
+      <span class="sig-byte" style="--d:1">50</span>
+      <span class="sig-byte" style="--d:2">4E</span>
+      <span class="sig-byte" style="--d:3">47</span>
+      <span class="sig-byte" style="--d:4">0D</span>
+      <span class="sig-byte" style="--d:5">0A</span>
+      <span class="sig-byte" style="--d:6">1A</span>
+      <span class="sig-byte" style="--d:7">0A</span>
+    </div>
+    <p class="sig-note reveal">PNG Signature · 每个 PNG 文件都以这 8 个字节开场 —— 这不是魔法，是结构</p>
+
+    <div class="hero-chips reveal">
+      <span class="chip chip-blue">无损像素</span>
+      <span class="chip chip-cyan">Alpha 透明</span>
+      <span class="chip chip-green">Chunk 结构</span>
+      <span class="chip chip-orange">Filter</span>
+      <span class="chip chip-purple">zlib / DEFLATE</span>
+    </div>
+
+    <a class="scroll-cue" href="#why" aria-label="向下滚动">
+      <span class="scroll-cue-line"></span><span class="scroll-cue-text">开始解码</span>
+    </a>
+  </div>
+</section>
+
+<main>
+
+<!-- ======== 01 背景 ======== -->
+<section class="section" id="why">
+  <div class="section-head reveal">
+    <span class="section-index">01</span>
+    <h2>背景</h2>
+    <p class="section-sub">硬件 PNG 预研已经启动 —— 团队首先需要一套一致、可验证的解码模型</p>
+  </div>
+
+  <div class="force-map reveal">
+    <div class="force-card">
+      <div class="force-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><path d="M8 34h32M12 34V20l8-6 8 6M28 34V14l6-4 6 4v20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>客户真实需求</h3>
+      <p>PNG的硬解码能力</p>
+    </div>
+    <div class="force-arrow" aria-hidden="true"><span></span></div>
+    <div class="force-target">
+      <div class="force-target-ring" aria-hidden="true"></div>
+      <h3>PNG 硬件IP EMEI-R1</h3>
+      <p>第一步不是写代码<br>而是统一对格式与解码路径的理解</p>
+    </div>
+    <div class="force-arrow" aria-hidden="true"><span></span></div>
+    <div class="force-card">
+      <div class="force-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><path d="M24 6l4.9 10.3L40 18l-8 8 1.9 11.3L24 32l-9.9 5.3L16 26l-8-8 11.1-1.7z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>竞品压力</h3>
+      <p>竞品已具备同类能力</p>
+    </div>
+  </div>
+
+  <p class="section-foot reveal">本次分享 = 后续需求澄清、方案设计与验证工作的共同基础 · 主讲约 35 分钟</p>
+</section>
+
+<!-- ======== 02 规范简史 ======== -->
+<section class="section" id="history">
+  <div class="section-head reveal">
+    <span class="section-index">02</span>
+    <h2>规范演进 30 年，核心模型始终稳定</h2>
+    <p class="section-sub">以 PNG Third Edition 裁决技术事实 —— 但本次只讲静态 PNG 的核心解码路径</p>
+  </div>
+
+  <div class="timeline reveal">
+    <div class="timeline-track" aria-hidden="true"><span class="timeline-fill"></span></div>
+    <div class="timeline-node">
+      <span class="timeline-dot"></span>
+      <h3>1996</h3>
+      <p class="timeline-tag">PNG 1.0</p>
+      <p>成为 W3C Recommendation，确立 Signature、Chunk、无损压缩、Filter、Alpha 核心模型</p>
+    </div>
+    <div class="timeline-node">
+      <span class="timeline-dot"></span>
+      <h3>2003</h3>
+      <p class="timeline-tag">Second Edition</p>
+      <p>汇总澄清，形成长期稳定使用的规范基线，大量现有实现以其为基础</p>
+    </div>
+    <div class="timeline-node">
+      <span class="timeline-dot"></span>
+      <h3>2025</h3>
+      <p class="timeline-tag">Third Edition</p>
+      <p>纳入 APNG，整合 HDR/WCG、Exif 等能力与澄清 —— 本讲义以其为事实基线</p>
+    </div>
+  </div>
+
+  <div class="scope-gate reveal">
+    <div class="scope-col scope-yes">
+      <h4>本次主讲</h4>
+      <p>静态 PNG 核心解码路径：Chunk · IDAT · Filter · Unfilter · zlib/DEFLATE 直觉</p>
+    </div>
+    <div class="scope-col scope-maybe">
+      <h4>附录 / 问答</h4>
+      <p>Adam7 隔行 · DEFLATE 字段细节 · 硬件行缓冲与 32 KiB history</p>
+    </div>
+    <div class="scope-col scope-no">
+      <h4>不展开</h4>
+      <p>APNG · 完整 Huffman 构造 · 编码调参 · 硬件微架构</p>
+    </div>
+  </div>
+  <p class="section-foot reveal">演讲 Scope ≠ 硬件产品最终支持 Scope</p>
+</section>
+
+<!-- ======== 03 PNG 的价值 ======== -->
+<section class="section" id="value">
+  <div class="section-head reveal">
+    <span class="section-index">03</span>
+    <h2>PNG 解决的是「精确像素」与「透明度」问题</h2>
+    <p class="section-sub">它的价值不是「文件一定更小」—— 而是每一个像素都可被精确还原</p>
+  </div>
+
+  <div class="value-grid">
+    <div class="value-card reveal">
+      <div class="value-icon icon-pixel" aria-hidden="true"></div>
+      <h3>无损像素</h3>
+      <p>解码输出与编码输入逐位一致，文字与线条边缘不糊</p>
+    </div>
+    <div class="value-card reveal">
+      <div class="value-icon icon-alpha" aria-hidden="true"></div>
+      <h3>Alpha 透明</h3>
+      <p>每像素可带独立透明度，UI 图标叠在任何背景上都干净</p>
+    </div>
+    <div class="value-card reveal">
+      <div class="value-icon icon-chunk" aria-hidden="true"><span></span><span></span><span></span></div>
+      <h3>Chunk 可扩展</h3>
+      <p>自描述的分块结构：新能力以新 Chunk 加入，旧解码器可跳过</p>
+    </div>
+    <div class="value-card reveal">
+      <div class="value-icon icon-stream" aria-hidden="true"><span></span></div>
+      <h3>流式可解码</h3>
+      <p>顺序解析、逐行重建，天然适合硬件流水线与有限缓冲</p>
+    </div>
+  </div>
+
+  <div class="usecase-strip reveal">
+    <span class="usecase-label">典型场景</span>
+    <span class="chip chip-blue">UI 图标</span>
+    <span class="chip chip-blue">文字 / 线稿</span>
+    <span class="chip chip-blue">屏幕截图</span>
+    <span class="chip chip-blue">透明素材</span>
+  </div>
+
+  <div class="warn-strip reveal">
+    <span class="warn-badge">注意</span>
+    <p>「无损」≠「文件一定更小」；扩展名 ≠ 品质保证。文件大小取决于图像内容、编码器与参数。</p>
+  </div>
+</section>
+
+<!-- ======== 04 文件解剖 ======== -->
+<section class="section" id="anatomy">
+  <div class="section-head reveal">
+    <span class="section-index">04</span>
+    <h2>一张 PNG 的解剖图</h2>
+    <p class="section-sub">真实文件 <code>demo-sub-multi-idat.png</code>（1204 字节）—— 点击每一块，看看里面装了什么</p>
+  </div>
+
+  <div class="explorer reveal">
+    <div class="explorer-strip" id="chunkStrip" role="tablist" aria-label="Chunk 序列"></div>
+    <div class="explorer-ruler" id="chunkRuler" aria-hidden="true"></div>
+    <div class="explorer-ghost">
+      <span class="ghost-chunk">PLTE / tRNS<span class="ghost-note">可选辅助 Chunk · 本例未出现</span></span>
+    </div>
+    <div class="explorer-detail">
+      <div class="detail-fields" id="detailFields"></div>
+      <div class="detail-hex" id="detailHex" aria-label="Hex 视图"></div>
+    </div>
+  </div>
+  <p class="section-foot reveal">合法静态 PNG 数据流 = 8-byte Signature → IHDR（首个）→ 可选/辅助 Chunk → 一个或多个连续 IDAT → IEND（结束）</p>
+</section>
+
+<!-- ======== 05 四段式 Chunk ======== -->
+<section class="section" id="chunk">
+  <div class="section-head reveal">
+    <span class="section-index">05</span>
+    <h2>所有 Chunk 都遵循同一套四段式结构</h2>
+    <p class="section-sub"><code>Length + Type + Data + CRC</code> —— 解码器因此可以顺序解析、跳过未知块、校验内容</p>
+  </div>
+
+  <div class="quad reveal" id="quad">
+    <div class="quad-bar">
+      <div class="quad-seg seg-len" data-info="Length · 4 字节 · 只数 Data 的字节数，不含自身、Type 和 CRC">
+        <span class="quad-label">Length</span><span class="quad-size">4 B</span>
+      </div>
+      <div class="quad-seg seg-type" data-info="Type · 4 字节 ASCII · 如 IHDR / IDAT / IEND；首字节大小写标记 Critical/Ancillary">
+        <span class="quad-label">Type</span><span class="quad-size">4 B</span>
+      </div>
+      <div class="quad-seg seg-data" data-info="Data · Length 个字节 · 本 Chunk 承载的内容，可以是 0 字节（如 IEND）">
+        <span class="quad-label">Data</span><span class="quad-size">0 … n B</span>
+      </div>
+      <div class="quad-seg seg-crc" data-info="CRC-32 · 4 字节 · 只覆盖 Type + Data，用于发现传输/存储损坏">
+        <span class="quad-label">CRC</span><span class="quad-size">4 B</span>
+      </div>
+    </div>
+    <div class="quad-crc-scope" aria-hidden="true">
+      <span class="quad-crc-band" id="crcBand"></span>
+      <span class="quad-crc-label">CRC-32 覆盖范围：Type + Data</span>
+    </div>
+    <p class="quad-info" id="quadInfo">把鼠标悬停到任意一段上，查看它的规则。</p>
+  </div>
+
+  <div class="quad-rules reveal">
+    <div class="rule-card">
+      <h4>Length 只数 Data</h4>
+      <p>读到 Length 后，解码器无需理解内容就能完整跳过这个 Chunk</p>
+    </div>
+    <div class="rule-card">
+      <h4>Critical / Ancillary</h4>
+      <p>Type 首字节大写 = Critical（IHDR/PLTE/IDAT/IEND，理解图像必需）；小写 = Ancillary，未知块可跳过</p>
+    </div>
+    <div class="rule-card">
+      <h4>可跳过 ≠ 可忽略错误</h4>
+      <p>CRC 校验失败、Critical 块无法识别，都是必须上报的错误</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======== 06 多 IDAT 一条流 ======== -->
+<section class="section" id="idat">
+  <div class="section-head reveal">
+    <span class="section-index">06</span>
+    <h2>多个 IDAT，仍然只是<b>一条</b>数据流</h2>
+    <p class="section-sub">IDAT 是物理分段 —— 所有 IDAT 的 Data 按文件顺序拼接，构成一条连续 zlib 流</p>
+  </div>
+
+  <div class="merge reveal" id="merge">
+    <div class="merge-sources">
+      <div class="merge-src" style="--c:var(--green)">
+        <h4>IDAT #1 <small>374 B</small></h4>
+        <p class="mono">78 9C AD 96 …</p>
+        <span class="merge-badge">含 zlib 头 78 9C</span>
+      </div>
+      <div class="merge-src" style="--c:var(--green)">
+        <h4>IDAT #2 <small>374 B</small></h4>
+        <p class="mono">41 19 D4 45 …</p>
+        <span class="merge-badge dim">流中段 · 无头</span>
+      </div>
+      <div class="merge-src" style="--c:var(--green)">
+        <h4>IDAT #3 <small>375 B</small></h4>
+        <p class="mono">DA B9 20 05 …</p>
+        <span class="merge-badge dim">流尾 · 含 Adler-32</span>
+      </div>
+    </div>
+    <div class="merge-pipes" aria-hidden="true"><span></span><span></span><span></span></div>
+    <div class="merge-stream">
+      <div class="merge-stream-label">按文件顺序拼接 → 一条 zlib 流（1123 字节）</div>
+      <div class="merge-bar">
+        <span class="merge-part" style="--w:33.3;--c:var(--green)"></span>
+        <span class="merge-part" style="--w:33.3;--c:var(--cyan)"></span>
+        <span class="merge-part" style="--w:33.4;--c:var(--blue)"></span>
+      </div>
+      <div class="merge-marks">
+        <div class="marks-row">
+          <span class="marks-title">IDAT 边界</span>
+          <div class="marks-line"><i style="left:33.3%"></i><i style="left:66.6%"></i></div>
+        </div>
+        <div class="marks-row">
+          <span class="marks-title">DEFLATE Block / Scanline 边界</span>
+          <div class="marks-line marks-mis"><i style="left:12%"></i><i style="left:47%"></i><i style="left:81%"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="warn-strip reveal">
+    <span class="warn-badge">关键</span>
+    <p>每个 IDAT 都有自己的 CRC，但它们不是各自独立的压缩图片。Chunk 边界可以落在任何地方 —— 甚至是 DEFLATE Block、Scanline 或 Adler-32 的中间。</p>
+  </div>
+</section>
+
+<!-- ======== 07 编码全景 ======== -->
+<section class="section" id="encode">
+  <div class="section-head reveal">
+    <span class="section-index">07</span>
+    <h2>编码全景：先 Filter，再 DEFLATE</h2>
+    <p class="section-sub">像素先被整理成「更好压缩」的字节模式，再交给无损熵编码</p>
+  </div>
+
+  <div class="pipe reveal" id="pipeEncode">
+    <div class="pipe-node" style="--c:var(--blue)">
+      <span class="pipe-dot"></span><h4>Raw Pixels</h4><p>原始像素矩阵</p>
+    </div>
+    <div class="pipe-link"><i></i></div>
+    <div class="pipe-node" style="--c:var(--blue)">
+      <span class="pipe-dot"></span><h4>Scanlines</h4><p>按行切分</p>
+    </div>
+    <div class="pipe-link"><i></i></div>
+    <div class="pipe-node" style="--c:var(--orange)">
+      <span class="pipe-dot"></span><h4>Filter</h4><p>逐行预测变换<em class="pipe-badge">不是压缩算法</em></p>
+    </div>
+    <div class="pipe-link"><i></i></div>
+    <div class="pipe-node" style="--c:var(--orange)">
+      <span class="pipe-dot"></span><h4>Filtered Bytes</h4><p>Filter Type + 残差</p>
+    </div>
+    <div class="pipe-link"><i></i></div>
+    <div class="pipe-node" style="--c:var(--purple)">
+      <span class="pipe-dot"></span><h4>zlib / DEFLATE</h4><p>LZ77 + Huffman<em class="pipe-badge">无损熵编码</em></p>
+    </div>
+    <div class="pipe-link"><i></i></div>
+    <div class="pipe-node" style="--c:var(--green)">
+      <span class="pipe-dot"></span><h4>IDAT</h4><p>分段写入文件</p>
+    </div>
+  </div>
+
+  <p class="section-foot reveal">Filter Type 字节与 filtered bytes 一起进入 zlib —— 解码端必须先解压，才能看到它们</p>
+</section>
+
+<!-- ======== 08 解码全景 ======== -->
+<section class="section" id="decode">
+  <div class="section-head reveal">
+    <span class="section-index">08</span>
+    <h2>解码：严格按相反顺序，把字节还原成像素</h2>
+    <p class="section-sub">这是全场的主路径 —— 后面每一节，都是在放大其中某一步</p>
+  </div>
+
+  <div class="decode reveal" id="decodeSteps">
+    <div class="decode-step" style="--c:var(--blue)">
+      <span class="decode-no">1</span>
+      <div><h4>解析 Chunk</h4><p>Signature → IHDR → IDAT → IEND，校验 CRC</p></div>
+      <span class="decode-layer">文件层</span>
+    </div>
+    <div class="decode-step" style="--c:var(--green)">
+      <span class="decode-no">2</span>
+      <div><h4>拼接 IDAT</h4><p>所有 IDAT 的 Data 按序连成一条 zlib 流</p></div>
+      <span class="decode-layer">文件层</span>
+    </div>
+    <div class="decode-step" style="--c:var(--purple)">
+      <span class="decode-no">3</span>
+      <div><h4>Inflate</h4><p>zlib/DEFLATE 解压，得到带 Filter Type 的 Scanlines</p></div>
+      <span class="decode-layer">压缩层</span>
+    </div>
+    <div class="decode-step" style="--c:var(--orange)">
+      <span class="decode-no">4</span>
+      <div><h4>Unfilter</h4><p>逐行、逐字节用已重建邻居还原残差</p></div>
+      <span class="decode-layer">扫描线层</span>
+    </div>
+    <div class="decode-step" style="--c:var(--cyan)">
+      <span class="decode-no">5</span>
+      <div><h4>像素解释</h4><p>按 IHDR 的 Color Type / Bit Depth（必要时经 PLTE/tRNS）得到像素</p></div>
+      <span class="decode-layer">像素层</span>
+    </div>
+  </div>
+
+  <div class="decode-side reveal">
+    <div class="warn-strip">
+      <span class="warn-badge">顺序</span>
+      <p>先 Inflate，再 Unfilter —— 不可颠倒。压缩层看不到像素，滤波层看不到压缩。</p>
+    </div>
+    <div class="hw-strip">
+      <span class="hw-badge">硬件视角</span>
+      <p>整条路径可以流式执行：zlib 流顺序进入，逐行 Unfilter 只需要当前行 + 上一行缓冲。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======== 09 Scanline ======== -->
+<section class="section" id="scanline">
+  <div class="section-head reveal">
+    <span class="section-index">09</span>
+    <h2>Inflate 的输出：带 Filter Type 的 Scanline</h2>
+    <p class="section-sub">解压出来的<b>不是</b>像素 —— 每行开头还多一个 Filter Type 字节</p>
+  </div>
+
+  <div class="scanline reveal">
+    <div class="scan-row" aria-label="一条 Scanline 的字节布局">
+      <span class="scan-f" title="Filter Type">F</span>
+      <span class="scan-px"><i>R</i><i>G</i><i>B</i></span>
+      <span class="scan-px"><i>R</i><i>G</i><i>B</i></span>
+      <span class="scan-px"><i>R</i><i>G</i><i>B</i></span>
+      <span class="scan-px"><i>R</i><i>G</i><i>B</i></span>
+      <span class="scan-ellipsis">…</span>
+    </div>
+    <div class="scan-brace">
+      <span class="scan-brace-f">1 byte · Filter Type（0–4）</span>
+      <span class="scan-brace-px">filtered scanline bytes · 本行长度 = width × bpp</span>
+    </div>
+  </div>
+
+  <div class="quad-rules reveal">
+    <div class="rule-card"><h4>bpp = bytes per pixel</h4><p>8-bit RGB 时 bpp = 3 —— Filter 的「左侧」指 3 个字节之前，不是 1 个</p></div>
+    <div class="rule-card"><h4>Filter 可逐行不同</h4><p>每一行独立选择 0–4 中的一种，不要求全图统一</p></div>
+    <div class="rule-card"><h4>Filter Type ≠ 像素</h4><p>它只属于滤波层，不参与颜色通道解释</p></div>
+  </div>
+</section>
+
+<!-- ======== 10 五种 Filter ======== -->
+<section class="section" id="filters">
+  <div class="section-head reveal">
+    <span class="section-index">10</span>
+    <h2>五种 Filter，只是在选择「预测来源」</h2>
+    <p class="section-sub">全部是可逆的字节级预测变换 —— 目的只有一个：让残差出现更多小值与重复</p>
+  </div>
+
+  <div class="filter-grid">
+    <div class="filter-card reveal">
+      <h4><span class="filter-no">0</span>None</h4>
+      <div class="filter-svg" data-filter="none"></div>
+      <p class="filter-formula mono">Recon(x) = Filt(x)</p>
+      <p>不预测，原样存储</p>
+    </div>
+    <div class="filter-card filter-hot reveal">
+      <h4><span class="filter-no">1</span>Sub<em class="hot-badge">重点</em></h4>
+      <div class="filter-svg" data-filter="sub"></div>
+      <p class="filter-formula mono">Recon(x) = Filt(x) + Recon(a)</p>
+      <p>预测 = 左侧已重建字节，适合水平渐变</p>
+    </div>
+    <div class="filter-card filter-hot reveal">
+      <h4><span class="filter-no">2</span>Up<em class="hot-badge">重点</em></h4>
+      <div class="filter-svg" data-filter="up"></div>
+      <p class="filter-formula mono">Recon(x) = Filt(x) + Recon(b)</p>
+      <p>预测 = 正上方已重建字节，适合垂直延续</p>
+    </div>
+    <div class="filter-card reveal">
+      <h4><span class="filter-no">3</span>Average</h4>
+      <div class="filter-svg" data-filter="average"></div>
+      <p class="filter-formula mono">Recon(x) = Filt(x) + ⌊(a+b)/2⌋</p>
+      <p>预测 = 左与上的平均（向下取整）</p>
+    </div>
+    <div class="filter-card reveal">
+      <h4><span class="filter-no">4</span>Paeth</h4>
+      <div class="filter-svg" data-filter="paeth"></div>
+      <p class="filter-formula mono">Recon(x) = Filt(x) + Paeth(a,b,c)</p>
+      <p>在 a / b / c 中选最接近 a+b−c 的那个</p>
+    </div>
+  </div>
+
+  <div class="neighbor-legend reveal">
+    <div class="neighbor-svg" id="neighborSvg"></div>
+    <p>a = 左侧 · b = 上方 · c = 左上 —— 全部是<b>已重建</b>的字节；行首左侧、第一行上方等不存在的邻居一律按 0 计。所有运算按 byte 进行（mod 256）。</p>
+  </div>
+</section>
+
+<!-- ======== 11 Unfilter 实验室 ======== -->
+<section class="section" id="unfilter">
+  <div class="section-head reveal">
+    <span class="section-index">11</span>
+    <h2>Unfilter 实验室：看着字节被逐个重建</h2>
+    <p class="section-sub">真实数据，来自 <code>demo-sub-multi-idat.png</code> —— 注意：预测值取自<b>已重建</b>的邻居，不是 filtered 字节</p>
+  </div>
+
+  <div class="lab reveal">
+    <div class="lab-tabs" role="tablist" aria-label="Filter 类型">
+      <button class="lab-tab active" id="tabSub" role="tab" aria-selected="true">Sub · 左侧预测（第 0 行）</button>
+      <button class="lab-tab" id="tabUp" role="tab" aria-selected="false">Up · 上方预测（第 1 行）</button>
+    </div>
+
+    <div class="lab-stage">
+      <div class="lab-row-head"><span class="lab-row-tag" id="labFilterTag">Filter Type = 1 · Sub</span></div>
+      <div class="lab-up-row" id="labUpRow" hidden>
+        <span class="lab-axis">上一行<br><small>已重建</small></span>
+        <div class="lab-grid" id="upGrid"></div>
+      </div>
+      <div class="lab-main-row">
+        <span class="lab-axis" id="labAxis">当前行<br><small>重建中</small></span>
+        <div class="lab-grid" id="labGrid"></div>
+      </div>
+    </div>
+
+    <div class="lab-formula">
+      <span class="mono" id="labFormula">Recon[x] = ( Filtered[x] + Recon[x−3] ) mod 256</span>
+      <span class="lab-calc mono" id="labCalc">按「单步」或「播放」开始</span>
+    </div>
+
+    <div class="lab-controls">
+      <button class="btn" id="labStep">单步 →</button>
+      <button class="btn btn-primary" id="labPlay">▶ 播放</button>
+      <button class="btn" id="labReset">↺ 重置</button>
+      <span class="lab-progress mono" id="labProgress">0 / 33 bytes</span>
+      <span class="lab-anchor" id="labAnchor" hidden>★ 讲义锚点：像素 (8,0) 的 G 通道 = 57 + 8 = 65</span>
+    </div>
+  </div>
+</section>
+
+<!-- ======== 12 zlib ≠ DEFLATE ======== -->
+<section class="section" id="zlib">
+  <div class="section-head reveal">
+    <span class="section-index">12</span>
+    <h2>zlib ≠ DEFLATE</h2>
+    <p class="section-sub">IDAT 承载的是 zlib 数据流；zlib 是封装，DEFLATE 才是里面的压缩编码</p>
+  </div>
+
+  <div class="zwrap reveal">
+    <div class="zwrap-bar">
+      <div class="zwrap-seg z-head"><span class="quad-label">CMF · FLG</span><span class="quad-size">2 B 头</span></div>
+      <div class="zwrap-seg z-body"><span class="quad-label">DEFLATE 数据（LZ77 + Huffman）</span><span class="quad-size">主体</span></div>
+      <div class="zwrap-seg z-tail"><span class="quad-label">Adler-32</span><span class="quad-size">4 B</span></div>
+    </div>
+    <p class="zwrap-note mono">本例 IDAT #1 的 Data 以 <b>78 9C</b> 开头 —— 这正是 zlib 头，且只在整条流开头出现一次</p>
+  </div>
+
+  <div class="shield-grid reveal">
+    <div class="shield-card" style="--c:var(--purple)">
+      <h4>CRC-32 · 每个 Chunk 末尾</h4>
+      <p>校验范围：该 Chunk 的 <b>Type + Data</b></p>
+      <p class="shield-layer">守护「文件层」的完整性</p>
+    </div>
+    <div class="shield-card" style="--c:var(--yellow)">
+      <h4>Adler-32 · zlib 流末尾</h4>
+      <p>校验范围：zlib 所表示的<b>未压缩数据</b></p>
+      <p class="shield-layer">守护「压缩层」的完整性</p>
+    </div>
+  </div>
+  <p class="section-foot reveal">两者覆盖范围与角色不同，不可互换；PNG 压缩方法 0 = zlib 格式承载 DEFLATE</p>
+</section>
+
+<!-- ======== 13 LZ77 ======== -->
+<section class="section" id="lz77">
+  <div class="section-head reveal">
+    <span class="section-index">13</span>
+    <h2>LZ77：重复的内容，不再重复存储</h2>
+    <p class="section-sub">遇到已经出现过的片段，就写一个「回看引用」—— 长度 + 距离</p>
+  </div>
+
+  <div class="lz reveal" id="lzStage">
+    <div class="lz-window" id="lzWindow" aria-label="LZ77 滑动窗口演示"></div>
+    <div class="lz-arc" id="lzArc" aria-hidden="true">
+      <svg viewBox="0 0 600 90" preserveAspectRatio="none">
+        <path id="lzArcPath" d="M 470 78 C 400 10, 220 10, 150 78" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="6 6"/>
+        <path id="lzArcHead" d="M150 78 l-10 -2 l4 10 z" fill="currentColor"/>
+      </svg>
+      <span class="lz-arc-label mono" id="lzArcLabel">Length = 6 · Distance = 3</span>
+    </div>
+    <div class="lz-out">
+      <span class="lz-out-title">输出 Token</span>
+      <div class="lz-tokens" id="lzTokens"></div>
+    </div>
+    <div class="lz-controls">
+      <button class="btn btn-primary" id="lzReplay">▶ 再演一遍</button>
+      <span class="lz-caption" id="lzCaption">扫描器从左到右前进……</span>
+    </div>
+  </div>
+
+  <div class="quad-rules reveal">
+    <div class="rule-card"><h4>Literal</h4><p>没见过的字节，原样输出（如开头的 A B C）</p></div>
+    <div class="rule-card"><h4>Length / Distance</h4><p>见过的片段，输出引用：「往回 3 个字节，抄 6 个」</p></div>
+    <div class="rule-card"><h4>≤ 32 KiB 窗口</h4><p>引用只能看向最近 32 KiB —— 这正是硬件 history 缓冲的来源</p></div>
+  </div>
+  <p class="section-foot reveal">LZ77 只看到字节模式，不理解像素语义 —— Filter 创造的重复与小值，在这里兑现为压缩率</p>
+</section>
+
+<!-- ======== 14 Huffman ======== -->
+<section class="section" id="huffman">
+  <div class="section-head reveal">
+    <span class="section-index">14</span>
+    <h2>Huffman：常见的符号，用更短的码</h2>
+    <p class="section-sub">LZ77 输出的 literal 与 length/distance，再交给变长前缀码做统计压缩</p>
+  </div>
+
+  <div class="hf reveal" id="hfStage">
+    <div class="hf-chart" id="hfChart"></div>
+    <div class="hf-legend">
+      <div class="hf-legend-row"><span class="hf-box hf-box-freq"></span>出现频率</div>
+      <div class="hf-legend-row"><span class="hf-box hf-box-code"></span>码长（越常见越短）</div>
+    </div>
+  </div>
+
+  <div class="quad-rules reveal">
+    <div class="rule-card"><h4>前缀码 = 无歧义</h4><p>没有任何一个码是另一个码的前缀，比特流可以无停顿地逐个解出</p></div>
+    <div class="rule-card"><h4>两张表</h4><p>DEFLATE 对 literal/length 与 distance 分别使用各自的 Huffman 表</p></div>
+    <div class="rule-card"><h4>Fixed / Dynamic / Canonical</h4><p>表的构造与传输细节 → 留作问答，不影响今天的解码主路径</p></div>
+  </div>
+</section>
+
+<!-- ======== 15 对比与回顾 ======== -->
+<section class="section" id="compare">
+  <div class="section-head reveal">
+    <span class="section-index">15</span>
+    <h2>理解路径，才能做正确的取舍</h2>
+    <p class="section-sub">PNG 与常见 Baseline JPEG：不是谁取代谁，而是各管一段场景</p>
+  </div>
+
+  <div class="vs reveal">
+    <div class="vs-card vs-png">
+      <h3>PNG</h3>
+      <ul>
+        <li><b>无损</b>：解码 = 编码输入，逐位一致</li>
+        <li>支持 <b>Alpha</b> 透明度</li>
+        <li>锐利边缘、纯色区域不糊</li>
+        <li>Filter + DEFLATE：为可预测内容优化</li>
+      </ul>
+      <p class="vs-use">UI · 图标 · 文字线稿 · 截图 · 需要精确像素的一切</p>
+    </div>
+    <div class="vs-mark" aria-hidden="true">VS</div>
+    <div class="vs-card vs-jpeg">
+      <h3>Baseline JPEG</h3>
+      <ul>
+        <li><b>有损</b>：用视觉近似换取体积</li>
+        <li>无 Alpha</li>
+        <li>边缘与文字易出现振铃伪影</li>
+        <li>DCT 频域量化：为连续色调优化</li>
+      </ul>
+      <p class="vs-use">照片 · 自然图像 · 允许有损的连续色调内容</p>
+    </div>
+  </div>
+
+  <div class="quiz reveal">
+    <h3 class="quiz-title">三个检查题 —— 带走它们，你就带走了整场分享</h3>
+    <div class="quiz-grid">
+      <button class="quiz-card" data-answer="不是。多个 IDAT 的 Data 按文件顺序拼接成同一条 zlib 流；分段只是物理包装。">
+        <span class="quiz-q">IDAT #1 和 IDAT #2，是两张压缩图片吗？</span>
+        <span class="quiz-flip">点击查看答案</span>
+      </button>
+      <button class="quiz-card" data-answer="编码时先 Filter 再 DEFLATE；解码时先 Inflate，再逐行 Unfilter —— 顺序不可颠倒。">
+        <span class="quiz-q">滤波发生在 DEFLATE 之前，还是之后？</span>
+        <span class="quiz-flip">点击查看答案</span>
+      </button>
+      <button class="quiz-card" data-answer="因为它们需要精确像素、无损边缘和/或 Alpha —— 而不是因为 PNG 文件必然更小。">
+        <span class="quiz-q">为什么 UI、文字和透明图标常选 PNG？</span>
+        <span class="quiz-flip">点击查看答案</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="closing reveal">
+    <h3>回到硬件项目</h3>
+    <p>行缓冲 · 32 KiB history · 行内依赖与上一行数据需求 —— 设计约束，全部来自今天这条解码路径</p>
+    <div class="hero-chips">
+      <span class="chip chip-blue">解析 Chunk</span>
+      <span class="chip chip-green">拼接 IDAT</span>
+      <span class="chip chip-purple">Inflate</span>
+      <span class="chip chip-orange">Unfilter</span>
+      <span class="chip chip-cyan">像素解释</span>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>事实基线：PNG Specification (Third Edition) · RFC 1950 (zlib) · RFC 1951 (DEFLATE) · PNG Handbook</p>
+  <p>演示数据：demo-sub-multi-idat.png（32×32 Truecolor8 · 3 个连续 IDAT · 全部 Sub） —— 本页所有字节均为该文件的真实内容</p>
+</footer>
+
+<span class="kbd-hint" aria-hidden="true">
+  <span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">←</span><span class="kbd">→</span> 切换章节
+</span>
+
+<script src="js/main.js" defer></script>
+</body>
+</html>
