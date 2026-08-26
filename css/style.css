@@ -738,6 +738,16 @@ b { color: var(--txt); }
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 30px; margin-bottom: 24px; position: relative;
 }
+.lz-tabs { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+.lz-tab {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 1px; cursor: pointer;
+  color: var(--dim); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 8px 18px; transition: all .25s;
+}
+.lz-tab:hover { border-color: rgba(185,140,255,.5); color: var(--txt); }
+.lz-tab.active {
+  color: var(--purple); border-color: rgba(185,140,255,.6); background: rgba(185,140,255,.1);
+}
 .lz-window { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; position: relative; }
 .lz-byte {
   width: 52px; height: 60px; border-radius: 10px;

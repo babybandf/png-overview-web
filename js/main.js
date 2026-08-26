@@ -494,27 +494,56 @@ const el = (tag, cls, text) => {
 })();
 
 /* ============================================================
-   7. LZ77 播放器
+   7. LZ77 播放器（三示例标签切换）
    ============================================================ */
 (function lz77() {
   const win = $("#lzWindow");
   if (!win) return;
   const arc = $("#lzArc");
+  const arcSvg = $("#lzArc svg");
+  const arcPath = $("#lzArcPath");
+  const arcHead = $("#lzArcHead");
+  const arcLabel = $("#lzArcLabel");
   const tokensBox = $("#lzTokens");
   const caption = $("#lzCaption");
   const btn = $("#lzReplay");
-  const SEQ = "ABCABCABC".split("");
-  let timers = [], started = false;
+  const tabs = $$("#lzTabs .lz-tab");
 
-  SEQ.forEach((ch, i) => {
-    const b = el("div", "lz-byte");
-    b.innerHTML = `<span class="ch">${ch}</span><span class="idx">${i}</span>`;
-    win.appendChild(b);
-  });
-  const bytes = $$(".lz-byte", win);
+  // 每个示例：原始字节流 + token 序列（lit 原样输出；ref 回看引用）
+  const EXAMPLES = [
+    {
+      seq: "ABCABCABC",
+      toks: [{ t: "lit", p: 0 }, { t: "lit", p: 1 }, { t: "lit", p: 2 },
+             { t: "ref", p: 3, len: 6, dist: 3 }],
+    },
+    {
+      seq: "ABCABCAB",
+      toks: [{ t: "lit", p: 0 }, { t: "lit", p: 1 }, { t: "lit", p: 2 },
+             { t: "ref", p: 3, len: 5, dist: 3 }],
+    },
+    {
+      seq: "ABCDABCABC",
+      toks: [{ t: "lit", p: 0 }, { t: "lit", p: 1 }, { t: "lit", p: 2 }, { t: "lit", p: 3 },
+             { t: "ref", p: 4, len: 3, dist: 4 },
+             { t: "ref", p: 7, len: 3, dist: 3 }],
+    },
+  ];
+
+  let cur = 0, timers = [], started = false, bytes = [];
+
+  function build(ex) {
+    win.innerHTML = "";
+    ex.seq.split("").forEach((ch, i) => {
+      const b = el("div", "lz-byte");
+      b.innerHTML = `<span class="ch">${ch}</span><span class="idx">${i}</span>`;
+      win.appendChild(b);
+    });
+    bytes = $$(".lz-byte", win);
+  }
 
   function clearTimers() { timers.forEach(clearTimeout); timers = []; }
   function later(ms, fn) { timers.push(setTimeout(fn, ms)); }
+  function clearMarks(cls) { bytes.forEach((b) => b.classList.remove(cls)); }
 
   function reset() {
     clearTimers();
@@ -527,43 +556,87 @@ const el = (tag, cls, text) => {
     tokensBox.appendChild(el("span", "lz-token " + cls, text));
   }
 
+  // 按字节元素的真实位置绘制回看弧线：从扫描位置弯向匹配源
+  function showArc(tok) {
+    const W = arc.clientWidth;
+    const arcRect = arc.getBoundingClientRect();
+    const fromRect = bytes[tok.p].getBoundingClientRect();
+    const first = tok.p - tok.dist;
+    const last = Math.min(tok.p - 1, tok.p - tok.dist + tok.len - 1);
+    const r1 = bytes[first].getBoundingClientRect();
+    const r2 = bytes[last].getBoundingClientRect();
+    const fromX = fromRect.left + fromRect.width / 2 - arcRect.left;
+    const toX = (r1.left + r2.right) / 2 - arcRect.left;
+    const span = Math.max(fromX - toX, 60);
+    arcSvg.setAttribute("viewBox", `0 0 ${W} 90`);
+    arcPath.setAttribute("d", `M ${fromX} 78 C ${fromX - span * 0.3} 8, ${toX + span * 0.3} 8, ${toX} 78`);
+    arcHead.setAttribute("d", `M ${toX} 78 l -10 -2 l 4 10 z`);
+    arcLabel.textContent = `Length = ${tok.len} · Distance = ${tok.dist}`;
+    arc.classList.add("show");
+  }
+
   function play() {
+    const ex = EXAMPLES[cur];
     reset();
     const T = REDUCED ? 500 : 850;
+    let time = 0;
     caption.textContent = "扫描器从左到右前进……";
-    // 阶段 1：三个 literal
-    for (let i = 0; i < 3; i++) {
-      later(i * 620, () => {
-        bytes.forEach((b) => b.classList.remove("scan"));
-        bytes[i].classList.add("lit", "scan");
-        addToken("lit", SEQ[i]);
-        caption.textContent = `位置 ${i}：「${SEQ[i]}」是新内容 → literal 原样输出`;
-      });
-    }
-    // 阶段 2：发现匹配
-    later(3 * 620, () => {
-      bytes.forEach((b) => b.classList.remove("scan"));
-      bytes[3].classList.add("scan");
-      caption.textContent = "位置 3：往回看 —— ABC 刚刚出现过……";
+
+    ex.toks.forEach((tok) => {
+      if (tok.t === "lit") {
+        later(time, () => {
+          clearMarks("scan");
+          bytes[tok.p].classList.add("lit", "scan");
+          addToken("lit", ex.seq[tok.p]);
+          caption.textContent = `位置 ${tok.p}：「${ex.seq[tok.p]}」是新内容 → literal 原样输出`;
+        });
+        time += 620;
+      } else {
+        const base = time;
+        later(base, () => {
+          clearMarks("scan"); clearMarks("src");
+          arc.classList.remove("show");
+          bytes[tok.p].classList.add("scan");
+          caption.textContent = `位置 ${tok.p}：往回看 —— 「${ex.seq.slice(tok.p, tok.p + tok.len)}」刚刚出现过`;
+        });
+        later(base + T * 0.7, () => {
+          for (let i = tok.p - tok.dist; i <= Math.min(tok.p - 1, tok.p - tok.dist + tok.len - 1); i++) {
+            bytes[i].classList.add("src");
+          }
+          showArc(tok);
+          caption.textContent = `往回 ${tok.dist} 个字节，存在长度 ${tok.len} 的匹配`;
+        });
+        later(base + T * 1.7, () => {
+          for (let i = tok.p; i < tok.p + tok.len; i++) bytes[i].classList.add("match");
+          addToken("ref", `⟨ Len ${tok.len} · Dist ${tok.dist} ⟩`);
+          caption.textContent = `${tok.len} 个字节，只输出一个引用 token`;
+        });
+        time += T * 2.3;
+      }
     });
-    later(3 * 620 + T * 0.7, () => {
-      [0, 1, 2].forEach((i) => bytes[i].classList.add("src"));
-      arc.classList.add("show");
-      caption.textContent = "往回 3 个字节，存在长度 6 的匹配（ABCABC）";
-    });
-    // 阶段 3：输出引用
-    later(3 * 620 + T * 1.7, () => {
-      [3, 4, 5, 6, 7, 8].forEach((i) => bytes[i].classList.add("match"));
-      addToken("ref", "⟨ Len 6 · Dist 3 ⟩");
-      caption.textContent = "6 个字节，只输出一个引用 token";
-    });
-    later(3 * 620 + T * 2.6, () => {
-      bytes.forEach((b) => b.classList.remove("scan"));
-      caption.textContent = "9 个字节 → 3 个 literal + 1 个引用。重复越多，省得越多。";
+
+    later(time + T * 0.5, () => {
+      clearMarks("scan");
+      const litN = ex.toks.filter((t) => t.t === "lit").length;
+      const refN = ex.toks.filter((t) => t.t === "ref").length;
+      caption.textContent = `${ex.seq.length} 个字节 → ${litN} 个 literal + ${refN} 个引用。重复越多，省得越多。`;
     });
   }
 
+  function select(i, autoplay) {
+    cur = i;
+    tabs.forEach((t, j) => {
+      t.classList.toggle("active", j === i);
+      t.setAttribute("aria-selected", j === i);
+    });
+    build(EXAMPLES[i]);
+    if (autoplay) play(); else reset();
+  }
+
+  tabs.forEach((t, i) => t.addEventListener("click", () => select(i, true)));
   btn.addEventListener("click", play);
+
+  build(EXAMPLES[0]);
   new IntersectionObserver((es, io) => {
     if (es[0].isIntersecting && !started) { started = true; play(); io.disconnect(); }
   }, { threshold: 0.4 }).observe(win);

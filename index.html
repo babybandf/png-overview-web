@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PNG Overview · 从字节到像素 | 工程师互动讲义</title>
+<title>PNG Overview · 从字节到像素</title>
 <meta name="description" content="面向软件与硬件工程师的 PNG 解码互动讲义：Chunk 结构、IDAT 数据流、Filter/Unfilter、zlib/DEFLATE、LZ77 与 Huffman。">
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -52,7 +52,7 @@
   <canvas id="hexRain" aria-hidden="true"></canvas>
   <div class="hero-vignette" aria-hidden="true"></div>
   <div class="hero-content">
-    <p class="hero-kicker reveal">Multi-Media, ARM China, River, 2026/08/25</p>
+    <p class="hero-kicker reveal">Multi-Media, ARM China, River, 2026/08/26</p>
     <h1 class="hero-title reveal"><em>PNG</em> Overview<br>文件格式及压缩算法简介</h1>
 
     <div class="sig-strip reveal" id="sigStrip" aria-label="PNG 文件签名">
@@ -571,10 +571,15 @@
   <div class="section-head reveal">
     <span class="section-index">13</span>
     <h2>LZ77：重复的内容，不再重复存储</h2>
-    <p class="section-sub">遇到已经出现过的片段，就写一个「回看引用」—— 长度 + 距离</p>
+    <p class="section-sub">遇到已经出现过的片段，就写一个「回看引用」—— 三个示例，点击标签对比</p>
   </div>
 
   <div class="lz reveal" id="lzStage">
+    <div class="lz-tabs" id="lzTabs" role="tablist" aria-label="LZ77 示例切换">
+      <button class="lz-tab active" data-ex="0" role="tab" aria-selected="true">ABCABCABC</button>
+      <button class="lz-tab" data-ex="1" role="tab" aria-selected="false">ABCABCAB</button>
+      <button class="lz-tab" data-ex="2" role="tab" aria-selected="false">ABCDABCABC</button>
+    </div>
     <div class="lz-window" id="lzWindow" aria-label="LZ77 滑动窗口演示"></div>
     <div class="lz-arc" id="lzArc" aria-hidden="true">
       <svg viewBox="0 0 600 90" preserveAspectRatio="none">
@@ -628,7 +633,7 @@
 <section class="section" id="compare">
   <div class="section-head reveal">
     <span class="section-index">15</span>
-    <h2>理解路径，才能做正确的取舍</h2>
+    <h2>PNG vs Baseline JPEG</h2>
     <p class="section-sub">PNG 与常见 Baseline JPEG：不是谁取代谁，而是各管一段场景</p>
   </div>
 
