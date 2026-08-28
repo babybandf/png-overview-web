@@ -697,7 +697,7 @@ const el = (tag, cls, text) => {
    10. 键盘 ↑↓←→ 切换章节
    ============================================================ */
 (function keyboardNav() {
-  const SECTIONS = ["hero", "why", "history", "value", "anatomy", "chunk", "idat",
+  const SECTIONS = ["hero", "why", "history", "value", "chunk", "anatomy", "idat",
     "encode", "decode", "scanline", "filters", "unfilter", "zlib", "lz77", "huffman", "compare"];
   const STEP = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
 

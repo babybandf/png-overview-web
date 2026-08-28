@@ -17,7 +17,7 @@
       <span class="brand-text">PNG Overview</span>
     </a>
     <nav class="topnav" aria-label="章节导航">
-      <a href="#anatomy" data-nav="anatomy">文件结构</a>
+      <a href="#chunk" data-nav="anatomy">文件结构</a>
       <a href="#decode" data-nav="decode">解码路径</a>
       <a href="#unfilter" data-nav="unfilter">Unfilter</a>
       <a href="#lz77" data-nav="lz77">DEFLATE</a>
@@ -33,8 +33,8 @@
   <a href="#why"         data-nav="why"><i></i><span>背景</span></a>
   <a href="#history"     data-nav="history"><i></i><span>规范</span></a>
   <a href="#value"       data-nav="value"><i></i><span>价值</span></a>
-  <a href="#anatomy"     data-nav="anatomy"><i></i><span>解剖</span></a>
   <a href="#chunk"       data-nav="chunk"><i></i><span>Chunk</span></a>
+  <a href="#anatomy"     data-nav="anatomy"><i></i><span>解剖</span></a>
   <a href="#idat"        data-nav="idat"><i></i><span>IDAT</span></a>
   <a href="#encode"      data-nav="encode"><i></i><span>编码</span></a>
   <a href="#decode"      data-nav="decode"><i></i><span>解码</span></a>
@@ -210,33 +210,11 @@
   </div>
 </section>
 
-<!-- ======== 04 文件解剖 ======== -->
-<section class="section" id="anatomy">
-  <div class="section-head reveal">
-    <span class="section-index">04</span>
-    <h2>一张 PNG 的解剖图</h2>
-    <p class="section-sub">真实文件 <code>demo-sub-multi-idat.png</code>（1204 字节）—— 点击每一块，看看里面装了什么</p>
-  </div>
-
-  <div class="explorer reveal">
-    <div class="explorer-strip" id="chunkStrip" role="tablist" aria-label="Chunk 序列"></div>
-    <div class="explorer-ruler" id="chunkRuler" aria-hidden="true"></div>
-    <div class="explorer-ghost">
-      <span class="ghost-chunk">PLTE / tRNS<span class="ghost-note">可选辅助 Chunk · 本例未出现</span></span>
-    </div>
-    <div class="explorer-detail">
-      <div class="detail-fields" id="detailFields"></div>
-      <div class="detail-hex" id="detailHex" aria-label="Hex 视图"></div>
-    </div>
-  </div>
-  <p class="section-foot reveal">合法静态 PNG 数据流 = 8-byte Signature → IHDR（首个）→ 可选/辅助 Chunk → 一个或多个连续 IDAT → IEND（结束）</p>
-</section>
-
-<!-- ======== 05 四段式 Chunk ======== -->
+<!-- ======== 04 四段式 Chunk ======== -->
 <section class="section" id="chunk">
   <div class="section-head reveal">
-    <span class="section-index">05</span>
-    <h2>所有 Chunk 都遵循同一套四段式结构</h2>
+    <span class="section-index">04</span>
+    <h2>PNG Chunk 四段式结构</h2>
     <p class="section-sub"><code>Length + Type + Data + CRC</code> —— 解码器因此可以顺序解析、跳过未知块、校验内容</p>
   </div>
 
@@ -276,6 +254,28 @@
       <p>CRC 校验失败、Critical 块无法识别，都是必须上报的错误</p>
     </div>
   </div>
+</section>
+
+<!-- ======== 05 文件解剖 ======== -->
+<section class="section" id="anatomy">
+  <div class="section-head reveal">
+    <span class="section-index">05</span>
+    <h2>一张 PNG 的解剖图</h2>
+    <p class="section-sub">真实文件 <code>demo-sub-multi-idat.png</code>（1204 字节）—— 点击每一块，看看里面装了什么</p>
+  </div>
+
+  <div class="explorer reveal">
+    <div class="explorer-strip" id="chunkStrip" role="tablist" aria-label="Chunk 序列"></div>
+    <div class="explorer-ruler" id="chunkRuler" aria-hidden="true"></div>
+    <div class="explorer-ghost">
+      <span class="ghost-chunk">PLTE / tRNS<span class="ghost-note">可选辅助 Chunk · 本例未出现</span></span>
+    </div>
+    <div class="explorer-detail">
+      <div class="detail-fields" id="detailFields"></div>
+      <div class="detail-hex" id="detailHex" aria-label="Hex 视图"></div>
+    </div>
+  </div>
+  <p class="section-foot reveal">合法静态 PNG 数据流 = 8-byte Signature → IHDR（首个）→ 可选/辅助 Chunk → 一个或多个连续 IDAT → IEND（结束）</p>
 </section>
 
 <!-- ======== 06 多 IDAT 一条流 ======== -->

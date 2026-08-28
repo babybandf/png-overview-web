@@ -332,7 +332,7 @@ b { color: var(--txt); }
 .hw-strip { border-color: rgba(57,213,208,.35); background: rgba(57,213,208,.05); }
 .hw-badge { color: var(--cyan); border-color: rgba(57,213,208,.5); }
 
-/* ---------------- 04 文件解剖 explorer ---------------- */
+/* ---------------- 05 文件解剖 explorer ---------------- */
 .explorer {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 26px;
@@ -390,7 +390,7 @@ b { color: var(--txt); }
 .hex-legend span { font-size: 11px; color: var(--faint); display: flex; align-items: center; gap: 5px; }
 .hex-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
 
-/* ---------------- 05 四段式 ---------------- */
+/* ---------------- 04 四段式 ---------------- */
 .quad {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 34px 30px 26px; margin-bottom: 24px;
